@@ -1,0 +1,22 @@
+{
+  "name": "koubo-video",
+  "version": "1.0.0",
+  "description": "口播 AI 助手 - 每日口播视频自动渲染",
+  "scripts": {
+    "start": "remotion studio",
+    "render": "remotion render src/index.tsx MainComposition out/koubo_$(node -e \"console.log(new Date().toISOString().slice(0,10).replace(/-/g,''))\").mp4 --props=./props.json",
+    "render:ci": "remotion render src/index.tsx MainComposition out/koubo_$(date +%Y%m%d).mp4 --props=./props.json",
+    "build:send": "npm run render && python send_video.py --video-dir ./out"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@remotion/cli": "^4.0.0",
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0"
+  }
+}
