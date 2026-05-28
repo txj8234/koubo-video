@@ -25,319 +25,410 @@ export const myCompSchema = z.object({
   backgroundTheme: z.string().optional(),
   voiceover: z.string().optional(),
 });
+
 type Props = z.infer<typeof myCompSchema>;
 
-// ── 分段主题色（每段切换不同色调） ──────────────────────
-const THEMES: { colors: string[]; accent: string; label: string }[] = [
-  { colors: ['#0f0c29', '#302b63', '#24243e'], accent: '#7c5cfc', label: '深邃蓝紫' },
-  { colors: ['#1a0a00', '#5c2a00', '#8b4500'], accent: '#ff8c42', label: '暖阳橙' },
-  { colors: ['#0d2818', '#044a2b', '#006d3b'], accent: '#00d68f', label: '森林绿' },
-  { colors: ['#1a0011', '#4a0028', '#7a003e'], accent: '#ff4d94', label: '玫红' },
-  { colors: ['#001a2e', '#003d66', '#006699'], accent: '#4dc9f6', label: '深海蓝' },
-  { colors: ['#1a1a00', '#3d3d00', '#666600'], accent: '#f6e05e', label: '琥珀金' },
-  { colors: ['#0c0c1a', '#1a1a3d', '#2d2d66'], accent: '#a78bfa', label: '星空紫' },
-  { colors: ['#1a0d00', '#3d1f00', '#663300'], accent: '#fb923c', label: '焦糖棕' },
+// ── 莫兰迪色系主题（三分屏配色） ──────────────────────
+const THEMES: {
+  topBg: string;      // 顶部标题区背景
+  midBg: string;      // 中部内容区背景
+  botBg: string;      // 底部装饰区背景
+  titleColor: string; // 标题文字颜色
+  textColor: string;  // 正文文字颜色
+  accent: string;     // 强调色（高亮、标签）
+  dotColor: string;   // 装饰圆点颜色
+  label: string;      // 主题名称
+}[] = [
+  {
+    topBg: '#1a1a2e', midBg: '#f5f0eb', botBg: '#16213e',
+    titleColor: '#ffffff', textColor: '#2d2d2d', accent: '#e8a87c',
+    dotColor: '#c9b8a8', label: '暖沙棕'
+  },
+  {
+    topBg: '#1e2a3a', midBg: '#f0ede8', botBg: '#1a2a3a',
+    titleColor: '#ffffff', textColor: '#2d2d2d', accent: '#b8a89a',
+    dotColor: '#c4b8a8', label: '灰蓝调'
+  },
+  {
+    topBg: '#2a1e2e', midBg: '#f2ede6', botBg: '#1e1622',
+    titleColor: '#ffffff', textColor: '#2d2d2d', accent: '#c9a9b0',
+    dotColor: '#c4b0b8', label: '淡紫粉'
+  },
+  {
+    topBg: '#1e2e2a', midBg: '#efece8', botBg: '#162a24',
+    titleColor: '#ffffff', textColor: '#2d2d2d', accent: '#a8c4b0',
+    dotColor: '#b0c0b4', label: '灰绿色'
+  },
+  {
+    topBg: '#2a2a1e', midBg: '#f0ede6', botBg: '#222416',
+    titleColor: '#ffffff', textColor: '#2d2d2d', accent: '#c4b89a',
+    dotColor: '#c0b8a4', label: '米驼色'
+  },
 ];
 
-// ── 打字机逐字效果 ──────────────────────────────────────
-const TypewriterText: React.FC<{
-  text: string;
+// ── 三分屏布局 ──────────────────────────────────────────
+
+/** 顶部标题区域 */
+const TopTitle: React.FC<{
+  titleText: string;
+  subtitleText: string;
+  themeIndex: number;
   startFrame: number;
-  charsPerFrame?: number;
-  fontSize?: number;
-  color?: string;
-  fontWeight?: number;
-  textAlign?: 'left' | 'center';
-  maxWidth?: number;
-  textShadow?: string;
-}> = ({
-  text,
-  startFrame,
-  charsPerFrame = 0.35,
-  fontSize = 52,
-  color = '#ffffff',
-  fontWeight = 700,
-  textAlign = 'center',
-  maxWidth = 900,
-  textShadow = '0 2px 20px rgba(0,0,0,0.3)',
-}) => {
+}> = ({ titleText, subtitleText, themeIndex, startFrame }) => {
   const frame = useCurrentFrame();
   const localFrame = Math.max(0, frame - startFrame);
-  const charCount = Math.floor(localFrame * charsPerFrame);
-  const displayedText = text.slice(0, charCount);
-  const opacity = spring({
-    frame: localFrame,
-    fps: 30,
-    config: { damping: 20, stiffness: 100 },
-  });
-
-  return (
-    <div
-      style={{
-        fontSize,
-        color,
-        fontWeight,
-        fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
-        textAlign,
-        maxWidth,
-        width: '100%',
-        textShadow,
-        lineHeight: 1.4,
-        opacity,
-        position: 'relative',
-      }}
-    >
-      {displayedText}
-      {charCount < text.length && (
-        <span
-          style={{
-            opacity: Math.sin(localFrame * 0.15) > 0 ? 1 : 0,
-            color,
-            fontWeight: 300,
-            fontSize: fontSize * 0.9,
-          }}
-        >
-          |
-        </span>
-      )}
-    </div>
-  );
-};
-
-// ── 背景渐变（带缓慢流动） ────────────────────────────
-const Background: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
-  const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const theme = THEMES[themeIndex % THEMES.length];
-  const hueShift = interpolate(frame % (fps * 20), [0, fps * 20], [0, 30]);
+
+  // 标题从上方滑入
+  const titleSpring = spring({ frame: localFrame, fps, config: { damping: 14, stiffness: 70 } });
+  const titleY = interpolate(titleSpring, [0, 1], [-60, 0]);
+  const titleOpacity = interpolate(localFrame, [0, 15], [0, 1]);
+
+  // 副标题延迟出现
+  const subSpring = spring({ frame: Math.max(0, localFrame - 20), fps, config: { damping: 12, stiffness: 60 } });
+  const subY = interpolate(subSpring, [0, 1], [30, 0]);
+  const subOpacity = interpolate(Math.max(0, localFrame - 20), [0, 15], [0, 1]);
+
+  // 顶部装饰线
+  const lineWidth = interpolate(localFrame, [0, 30], [0, 200]);
+
   return (
     <div
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
-        width: '100%',
-        height: '100%',
-        background: `linear-gradient(135deg, ${theme.colors[0]}, ${theme.colors[1]}, ${theme.colors[2]})`,
-        filter: `hue-rotate(${hueShift}deg)`,
+        right: 0,
+        height: '38%',
+        background: `linear-gradient(135deg, ${theme.topBg}, ${theme.topBg}dd)`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '40px 60px',
+        overflow: 'hidden',
       }}
-    />
+    >
+      {/* 顶部装饰线 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: lineWidth,
+          height: 3,
+          borderRadius: 2,
+          background: theme.accent,
+          opacity: titleOpacity,
+        }}
+      />
+
+      {/* 主标题 */}
+      <div
+        style={{
+          fontSize: 56,
+          fontWeight: 800,
+          color: theme.titleColor,
+          textAlign: 'center',
+          lineHeight: 1.3,
+          transform: `translateY(${titleY}px)`,
+          opacity: titleOpacity,
+          maxWidth: 900,
+          fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+          letterSpacing: 2,
+          textShadow: '0 2px 12px rgba(0,0,0,0.2)',
+        }}
+      >
+        {titleText}
+      </div>
+
+      {/* 副标题 */}
+      <div
+        style={{
+          fontSize: 24,
+          fontWeight: 400,
+          color: theme.accent,
+          textAlign: 'center',
+          marginTop: 16,
+          transform: `translateY(${subY}px)`,
+          opacity: subOpacity,
+          fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+          letterSpacing: 4,
+        }}
+      >
+        {subtitleText}
+      </div>
+    </div>
   );
 };
 
-// ── 粒子背景动画 ────────────────────────────────────────
-const Particles: React.FC = () => {
+/** 中部内容区域 - 分段正文 */
+const MidContent: React.FC<{
+  text: string;
+  startFrame: number;
+  durationFrames: number;
+  themeIndex: number;
+  segmentIndex: number;
+  totalSegments: number;
+}> = ({ text, startFrame, durationFrames, themeIndex, segmentIndex, totalSegments }) => {
   const frame = useCurrentFrame();
-  const particles = useMemo(() => {
-    return Array.from({ length: 40 }, (_, i) => ({
-      x: (i * 137 + 50) % 100,
-      y: (i * 73 + 30) % 100,
-      size: 1.5 + (i % 5),
-      speed: 0.2 + (i % 6) * 0.12,
-      opacity: 0.08 + (i % 4) * 0.06,
-    }));
-  }, []);
+  const localFrame = Math.max(0, frame - startFrame);
+  const { fps } = useVideoConfig();
+  const theme = THEMES[themeIndex % THEMES.length];
+
+  // 内容区滑入
+  const slideIn = spring({ frame: localFrame, fps, config: { damping: 16, stiffness: 80 } });
+  const translateY = interpolate(slideIn, [0, 1], [50, 0]);
+  const opacity = interpolate(localFrame, [0, 12], [0, 1]);
+
+  // 打字机效果
+  const charsPerFrame = 0.5;
+  const charCount = Math.min(Math.floor(localFrame * charsPerFrame), text.length);
+  const displayedText = text.slice(0, charCount);
+
+  // 淡出
+  const fadeOutStart = durationFrames - 20;
+  const fadeOpacity = localFrame > fadeOutStart
+    ? interpolate(localFrame, [fadeOutStart, durationFrames], [1, 0])
+    : 1;
+
+  // 分段标签
+  const tagOpacity = interpolate(localFrame, [0, 8], [0, 1]);
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'hidden' }}>
-      {particles.map((p, i) => {
-        const y = (p.y + frame * p.speed) % 110 - 5;
-        return (
+    <div
+      style={{
+        position: 'absolute',
+        top: '38%',
+        left: 0,
+        right: 0,
+        height: '50%',
+        background: theme.midBg,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '30px 60px',
+        overflow: 'hidden',
+      }}
+    >
+      {/* 分段标签 - 莫兰迪色胶囊 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          left: 40,
+          opacity: tagOpacity,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            padding: '4px 14px',
+            borderRadius: 20,
+            background: theme.accent + '33',
+            border: `1px solid ${theme.accent}66`,
+            fontSize: 13,
+            fontWeight: 600,
+            color: theme.textColor + 'cc',
+            fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+          }}
+        >
+          第{segmentIndex + 1}段 · 共{totalSegments}段
+        </div>
+      </div>
+
+      {/* 装饰圆点 - 莫兰迪色系 */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 16,
+          right: 40,
+          display: 'flex',
+          gap: 6,
+          opacity: tagOpacity,
+        }}
+      >
+        {Array.from({ length: totalSegments }).map((_, i) => (
           <div
             key={i}
             style={{
-              position: 'absolute',
-              left: `${p.x}%`,
-              top: `${y}%`,
-              width: p.size,
-              height: p.size,
+              width: 8,
+              height: 8,
               borderRadius: '50%',
-              backgroundColor: 'rgba(255,255,255,0.15)',
-              opacity: p.opacity,
-              boxShadow: `0 0 ${p.size * 2}px rgba(255,255,255,0.1)`,
+              background: i === segmentIndex ? theme.accent : theme.dotColor,
+              opacity: i === segmentIndex ? 1 : 0.4,
+              transition: 'all 0.3s',
             }}
           />
-        );
-      })}
+        ))}
+      </div>
+
+      {/* 正文内容 */}
+      <div
+        style={{
+          fontSize: 34,
+          fontWeight: 500,
+          color: theme.textColor,
+          textAlign: 'left',
+          lineHeight: 1.6,
+          transform: `translateY(${translateY}px)`,
+          opacity: opacity * fadeOpacity,
+          maxWidth: 900,
+          width: '100%',
+          fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+          letterSpacing: 1,
+        }}
+      >
+        {displayedText}
+        {charCount < text.length && (
+          <span style={{ opacity: interpolate(localFrame % 30, [0, 15, 30], [1, 0, 1]), fontWeight: 300 }}>
+            |
+          </span>
+        )}
+      </div>
+
+      {/* 底部虚线装饰 */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: 12,
+          left: 40,
+          right: 40,
+          height: 1,
+          borderTop: `1px dashed ${theme.dotColor}66`,
+          opacity: tagOpacity,
+        }}
+      />
     </div>
   );
 };
 
-// ── 装饰圆环（动态旋转） ──────────────────────────────
-const DecorativeRing: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
-  const frame = useCurrentFrame();
+/** 底部区域 - 进度条 + 标签 */
+const BottomBar: React.FC<{
+  progress: number;
+  themeIndex: number;
+  currentSegment: number;
+  totalSegments: number;
+}> = ({ progress, themeIndex, currentSegment, totalSegments }) => {
   const theme = THEMES[themeIndex % THEMES.length];
-  const rotation = interpolate(frame, [0, 120], [0, 360]);
-  const scale = 1 + Math.sin(frame * 0.02) * 0.1;
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        width: 600,
-        height: 600,
-        marginLeft: -300,
-        marginTop: -300,
-        transform: `rotate(${rotation}deg) scale(${scale})`,
-        border: `1px solid ${theme.accent}22`,
-        borderRadius: '50%',
-        pointerEvents: 'none',
-      }}
-    />
-  );
-};
 
-// ── 分段背景装饰（大号数字水印） ──────────────────────
-const SegmentNumber: React.FC<{ index: number; total: number }> = ({ index, total }) => {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: 80,
-        right: 40,
-        fontSize: 120,
-        fontWeight: 900,
-        color: 'rgba(255,255,255,0.04)',
-        fontFamily: 'Arial, sans-serif',
-        lineHeight: 1,
-        letterSpacing: -4,
-        pointerEvents: 'none',
-      }}
-    >
-      {String(index + 1).padStart(2, '0')}
-      <span style={{ fontSize: 48, opacity: 0.5 }}>/{String(total).padStart(2, '0')}</span>
-    </div>
-  );
-};
-
-// ── 进度条 ──────────────────────────────────────────────
-const ProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
   return (
     <div
       style={{
         position: 'absolute',
         bottom: 0,
         left: 0,
-        width: '100%',
-        height: 3,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        right: 0,
+        height: '12%',
+        background: theme.botBg,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        padding: '0 40px',
       }}
     >
+      {/* 进度条 */}
       <div
         style={{
-          width: `${Math.min(progress * 100, 100)}%`,
-          height: '100%',
-          background: 'linear-gradient(90deg, #7c5cfc, #ff8c42)',
-          transition: 'width 0.3s ease',
+          width: '100%',
+          height: 4,
+          background: '#ffffff22',
+          borderRadius: 2,
+          overflow: 'hidden',
+          marginBottom: 10,
         }}
-      />
+      >
+        <div
+          style={{
+            width: `${progress * 100}%`,
+            height: '100%',
+            background: `linear-gradient(90deg, ${theme.accent}, ${theme.accent}cc)`,
+            borderRadius: 2,
+            transition: 'width 0.3s',
+          }}
+        />
+      </div>
+
+      {/* 底部信息 */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 13,
+            color: '#ffffff88',
+            fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+          }}
+        >
+          口播 AI 助手 · 十二载军旅
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            gap: 6,
+            alignItems: 'center',
+          }}
+        >
+          {Array.from({ length: totalSegments }).map((_, i) => (
+            <div
+              key={i}
+              style={{
+                padding: '2px 8px',
+                borderRadius: 10,
+                fontSize: 11,
+                fontWeight: 600,
+                background: i <= currentSegment ? theme.accent + '44' : 'transparent',
+                color: i <= currentSegment ? theme.accent : '#ffffff44',
+                border: `1px solid ${i <= currentSegment ? theme.accent + '88' : '#ffffff22'}`,
+                fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
+              }}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };
 
-// ── 分段文字（带滑入动画） ──────────────────────────────
-const SegmentText: React.FC<{
-  text: string;
-  startFrame: number;
-  durationFrames: number;
-  index: number;
+/** 场景切换动画 - 背景色调过渡 */
+const SceneTransition: React.FC<{
   themeIndex: number;
-}> = ({ text, startFrame, durationFrames, index, themeIndex }) => {
+  children: React.ReactNode;
+}> = ({ themeIndex, children }) => {
   const frame = useCurrentFrame();
-  const localFrame = Math.max(0, frame - startFrame);
-  const theme = THEMES[themeIndex % THEMES.length];
+  const { fps } = useVideoConfig();
+  const prevTheme = THEMES[Math.max(0, themeIndex - 1) % THEMES.length];
+  const currTheme = THEMES[themeIndex % THEMES.length];
 
-  // 滑入动画：从下方 40px 滑入 + 淡入
-  const slideIn = spring({
-    frame: localFrame,
-    fps: 30,
-    config: { damping: 15, stiffness: 80 },
+  // 过渡进度（每段前1秒）
+  const transitionProgress = interpolate(frame % fps, [0, fps], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
   });
-  const translateY = interpolate(slideIn, [0, 1], [40, 0]);
-  const opacity = interpolate(slideIn, [0, 0.5, 1], [0, 0.8, 1]);
-
-  // 打字机效果
-  const charsPerFrame = 0.4;
-  const charCount = Math.floor(localFrame * charsPerFrame);
-  const displayedText = text.slice(0, charCount);
-
-  // 淡出（接近结束时）
-  const fadeOutStart = durationFrames - 20;
-  const fadeOutOpacity = localFrame > fadeOutStart
-    ? interpolate(localFrame, [fadeOutStart, durationFrames], [1, 0])
-    : 1;
 
   return (
     <div
       style={{
         position: 'absolute',
-        top: '42%',
-        left: '50%',
-        transform: `translate(-50%, -50%) translateY(${translateY}px)`,
-        width: '85%',
-        maxWidth: 900,
-        opacity: opacity * fadeOutOpacity,
-        textAlign: 'center',
+        inset: 0,
+        // 背景色从上一段色调过渡到当前段
+        background: `linear-gradient(135deg, ${prevTheme.botBg}, ${currTheme.botBg})`,
+        opacity: interpolate(transitionProgress, [0, 1], [0, 0.15]),
+        pointerEvents: 'none',
       }}
     >
-      {/* 分段序号标签 */}
-      <div
-        style={{
-          display: 'inline-block',
-          padding: '4px 16px',
-          borderRadius: 20,
-          backgroundColor: theme.accent + '33',
-          color: theme.accent,
-          fontSize: 14,
-          fontWeight: 600,
-          marginBottom: 16,
-          letterSpacing: 2,
-          fontFamily: 'Arial, sans-serif',
-        }}
-      >
-        第 {index + 1} 点
-      </div>
-      <div
-        style={{
-          fontSize: 42,
-          color: '#ffffff',
-          fontWeight: 700,
-          fontFamily: '"PingFang SC", "Microsoft YaHei", sans-serif',
-          lineHeight: 1.5,
-          textShadow: '0 2px 30px rgba(0,0,0,0.4)',
-          minHeight: 60,
-        }}
-      >
-        {displayedText}
-        {charCount < text.length && (
-          <span style={{ opacity: Math.sin(localFrame * 0.15) > 0 ? 1 : 0, color: theme.accent, fontWeight: 300 }}>
-            |
-          </span>
-        )}
-      </div>
-    </div>
-  );
-};
-
-// ── 底部装饰线 ──────────────────────────────────────────
-const BottomDecoration: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
-  const frame = useCurrentFrame();
-  const theme = THEMES[themeIndex % THEMES.length];
-  const width = interpolate(frame % 60, [0, 60], [0, 200]);
-  return (
-    <div style={{ position: 'absolute', bottom: 40, left: '50%', marginLeft: -100, textAlign: 'center' }}>
-      <div
-        style={{
-          width,
-          height: 2,
-          background: `linear-gradient(90deg, transparent, ${theme.accent}66, transparent)`,
-          margin: '0 auto',
-        }}
-      />
-      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', marginTop: 8, letterSpacing: 3 }}>
-        口播 AI 助手 · 每日速递
-      </div>
+      {children}
     </div>
   );
 };
@@ -351,103 +442,67 @@ export const MainComposition: React.FC<Props> = ({
   voiceover,
 }) => {
   const { fps } = useVideoConfig();
-  const titleDuration = 3 * fps; // 3秒
-  const subtitleDuration = 2 * fps; // 2秒
 
+  const titleDuration = 3 * fps;     // 3秒标题
+  const subtitleDuration = 2 * fps;  // 2秒副标题
+  const headerDuration = titleDuration + subtitleDuration; // 5秒头部
+
+  // 每段开始帧
   const segmentStartFrames = segments.reduce((acc: number[], _, i) => {
     if (i === 0) {
-      acc.push(titleDuration + subtitleDuration);
+      acc.push(headerDuration);
     } else {
       acc.push(acc[i - 1] + segments[i - 1].duration * fps);
     }
     return acc;
   }, []);
 
+  // 总时长
   const totalSegmentFrames = segments.reduce((sum, s) => sum + s.duration * fps, 0);
-  const totalDuration = titleDuration + subtitleDuration + totalSegmentFrames;
+  const totalDuration = headerDuration + totalSegmentFrames;
+
   const audioSrc = voiceover ? staticFile('voiceover.mp3') : undefined;
 
   return (
-    <AbsoluteFill style={{ overflow: 'hidden' }}>
-      {/* 背景 */}
-      <Sequence from={0} durationInFrames={totalDuration}>
-        <Background themeIndex={0} />
-        <Particles />
-        <DecorativeRing themeIndex={0} />
-      </Sequence>
-
+    <AbsoluteFill style={{ backgroundColor: '#1a1a2e' }}>
       {/* 音频 */}
       {audioSrc && <Audio src={audioSrc} />}
 
-      {/* 标题区域：前 3 秒 */}
-      <Sequence from={0} durationInFrames={titleDuration}>
-        <div
-          style={{
-            position: 'absolute',
-            top: '35%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '90%',
-            textAlign: 'center',
-          }}
-        >
-          <TypewriterText
-            text={titleText}
-            startFrame={0}
-            fontSize={56}
-            fontWeight={800}
-            textShadow="0 4px 40px rgba(0,0,0,0.5)"
-          />
-        </div>
-      </Sequence>
+      {/* 标题区域 */}
+      <TopTitle
+        titleText={titleText}
+        subtitleText={subtitleText}
+        themeIndex={0}
+        startFrame={0}
+      />
 
-      {/* 副标题：第 3-5 秒 */}
-      <Sequence from={titleDuration} durationInFrames={subtitleDuration}>
-        <div
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: '80%',
-            textAlign: 'center',
-          }}
-        >
-          <TypewriterText
-            text={subtitleText}
-            startFrame={0}
-            fontSize={32}
-            fontWeight={400}
-            color="#c0c0c0"
-            textShadow="0 2px 20px rgba(0,0,0,0.3)"
-          />
-        </div>
-      </Sequence>
+      {/* 分段内容 */}
+      {segments.map((seg, i) => {
+        const themeIndex = i % THEMES.length;
+        return (
+          <Sequence
+            key={i}
+            from={segmentStartFrames[i]}
+            durationInFrames={seg.duration * fps}
+          >
+            <MidContent
+              text={seg.text}
+              startFrame={0}
+              durationFrames={seg.duration * fps}
+              themeIndex={themeIndex}
+              segmentIndex={i}
+              totalSegments={segments.length}
+            />
+          </Sequence>
+        );
+      })}
 
-      {/* 分段字幕 */}
-      {segments.map((seg, i) => (
-        <Sequence
-          key={i}
-          from={segmentStartFrames[i]}
-          durationInFrames={seg.duration * fps}
-        >
-          <SegmentText
-            text={seg.text}
-            startFrame={0}
-            durationFrames={seg.duration * fps}
-            index={i}
-            themeIndex={i}
-          />
-          <SegmentNumber index={i} total={segments.length} />
-          <BottomDecoration themeIndex={i} />
-        </Sequence>
-      ))}
-
-      {/* 进度条 */}
-      <ProgressBar
-        progress={
-          (useCurrentFrame() + 1) / totalDuration
-        }
+      {/* 底部进度条 */}
+      <BottomBar
+        progress={0}
+        themeIndex={0}
+        currentSegment={0}
+        totalSegments={segments.length}
       />
     </AbsoluteFill>
   );
