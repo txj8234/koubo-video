@@ -1,340 +1,256 @@
-import { AbsoluteFill, Sequence, useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
+import React, { useMemo } from 'react';
+import {
+  AbsoluteFill,
+  Audio,
+  Sequence,
+  useCurrentFrame,
+  useVideoConfig,
+  interpolate,
+  spring,
+  staticFile,
+} from 'remotion';
 import { z } from 'zod';
 
-// ===== Zod Schema：定义动态参数结构 =====
+// ── Zod Schema ──────────────────────────────────────────
 export const myCompSchema = z.object({
   titleText: z.string(),
   subtitleText: z.string(),
-  segments: z.array(z.object({
-    text: z.string(),
-    duration: z.number(),
-  })),
-  backgroundTheme: z.string().optional().default('gradient-blue-purple'),
-  voiceover: z.string().optional().default(''),
+  segments: z.array(
+    z.object({
+      text: z.string(),
+      duration: z.number(),
+    })
+  ),
+  backgroundTheme: z.string().optional(),
+  voiceover: z.string().optional(),
 });
 
-// ===== 渐变背景映射 =====
-const themeGradients: Record<string, string> = {
-  'gradient-blue-purple': 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)',
-  'gradient-dark-tech': 'linear-gradient(135deg, #020617 0%, #1e293b 50%, #0f0f23 100%)',
-  'gradient-warm': 'linear-gradient(135deg, #1c1917 0%, #292524 50%, #1c1917 100%)',
-  'gradient-green': 'linear-gradient(135deg, #022c22 0%, #064e3b 50%, #022c22 100%)',
-};
+type Props = z.infer<typeof myCompSchema>;
 
-// ===== 字幕逐字出现动画组件 =====
+// ── 打字机逐字效果 ──────────────────────────────────────
 const TypewriterText: React.FC<{
   text: string;
   startFrame: number;
-  duration: number;
-  fps: number;
-}> = ({ text, startFrame, duration, fps }) => {
+  charsPerFrame?: number;
+  fontSize?: number;
+  color?: string;
+  fontWeight?: number;
+}> = ({ text, startFrame, charsPerFrame = 0.35, fontSize = 52, color = '#ffffff', fontWeight = 700 }) => {
   const frame = useCurrentFrame();
-  const localFrame = frame - startFrame;
-  
-  // 每0.05秒显示一个字
-  const charsPerFrame = 1;
-  const visibleChars = Math.min(
-    Math.floor(localFrame * charsPerFrame),
-    text.length
-  );
+  const localFrame = Math.max(0, frame - startFrame);
+  const charCount = Math.floor(localFrame * charsPerFrame);
+  const displayedText = text.slice(0, charCount);
 
-  // 整段淡入
   const opacity = spring({
     frame: localFrame,
-    fps,
-    config: { damping: 200, stiffness: 200 },
+    fps: 30,
+    config: { damping: 20, stiffness: 100 },
   });
 
-  // 分段处理（| 为换行符）
-  const lines = text.split('|');
-
   return (
     <div
       style={{
-        opacity,
-        width: '100%',
-        padding: '40px 80px',
+        fontSize,
+        fontWeight,
+        color,
         textAlign: 'center',
+        lineHeight: 1.5,
+        textShadow: '0 4px 20px rgba(0,0,0,0.6)',
+        opacity,
+        padding: '0 80px',
+        maxWidth: 1600,
       }}
     >
-      {lines.map((line, lineIndex) => {
-        // 计算当前行之前的总字符数
-        const charsBeforeLine = lines.slice(0, lineIndex).join('').length + lineIndex;
-        const lineStart = charsBeforeLine;
-        const lineEnd = lineStart + line.length;
-        
-        // 当前行已经显示了多少字符
-        const lineVisibleChars = Math.max(0, Math.min(
-          visibleChars - charsBeforeLine,
-          line.length
-        ));
+      {displayedText}
+      {charCount < text.length && (
+        <span style={{ opacity: 0.5, animation: 'blink 0.6s infinite' }}>|</span>
+      )}
+    </div>
+  );
+};
 
-        const isLineComplete = lineVisibleChars >= line.length;
-        const isLineActive = visibleChars > charsBeforeLine;
+// ── 背景渐变 ────────────────────────────────────────────
+const Background: React.FC<{ theme?: string }> = ({ theme }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
 
+  // 缓慢流动的渐变
+  const hueShift = interpolate(frame, [0, fps * 20], [0, 30]);
+
+  const gradientMap: Record<string, string[]> = {
+    'gradient-blue-purple': ['#0f0c29', '#302b63', '#24243e'],
+    'gradient-dark': ['#1a1a2e', '#16213e', '#0f3460'],
+    'gradient-warm': ['#2d1b00', '#5c2a00', '#8b3a00'],
+    'gradient-green': ['#0d2818', '#044a2b', '#006d3b'],
+  };
+
+  const colors = gradientMap[theme || 'gradient-blue-purple'] || gradientMap['gradient-blue-purple'];
+
+  return (
+    <AbsoluteFill
+      style={{
+        background: `linear-gradient(135deg, ${colors[0]}, ${colors[1]} 50%, ${colors[2]})`,
+        filter: `hue-rotate(${hueShift}deg)`,
+      }}
+    />
+  );
+};
+
+// ── 粒子背景动画 ────────────────────────────────────────
+const Particles: React.FC = () => {
+  const frame = useCurrentFrame();
+  const particles = useMemo(() => {
+    return Array.from({ length: 30 }, (_, i) => ({
+      x: (i * 137 + 50) % 100,
+      y: (i * 73 + 30) % 100,
+      size: 2 + (i % 4),
+      speed: 0.3 + (i % 5) * 0.15,
+      opacity: 0.15 + (i % 3) * 0.1,
+    }));
+  }, []);
+
+  return (
+    <AbsoluteFill style={{ pointerEvents: 'none' }}>
+      {particles.map((p, i) => {
+        const y = (p.y + frame * p.speed) % 110 - 5;
         return (
           <div
-            key={lineIndex}
+            key={i}
             style={{
-              marginBottom: lines.length > 1 ? '20px' : '0',
-              minHeight: '60px',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
+              position: 'absolute',
+              left: `${p.x}%`,
+              top: `${y}%`,
+              width: p.size,
+              height: p.size,
+              borderRadius: '50%',
+              backgroundColor: 'rgba(255,255,255,0.5)',
+              opacity: p.opacity,
             }}
-          >
-            <span
-              style={{
-                fontSize: lines.length > 1 ? '36px' : '48px',
-                fontWeight: 700,
-                color: isLineActive ? '#ffffff' : '#334155',
-                fontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',
-                lineHeight: 1.6,
-                letterSpacing: '0.05em',
-                textShadow: '0 2px 10px rgba(0,0,0,0.5)',
-              }}
-            >
-              {isLineComplete
-                ? line
-                : isLineActive
-                  ? line.slice(0, lineVisibleChars)
-                  : ''}
-              {isLineActive && !isLineComplete && (
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: '3px',
-                    height: '1.2em',
-                    backgroundColor: '#60a5fa',
-                    marginLeft: '4px',
-                    verticalAlign: 'text-bottom',
-                    animation: 'none',
-                  }}
-                />
-              )}
-            </span>
-          </div>
+          />
         );
       })}
-    </div>
+    </AbsoluteFill>
   );
 };
 
-// ===== 进度条组件 =====
-const ProgressBar: React.FC<{
-  currentSegment: number;
-  totalSegments: number;
-  progress: number; // 0-1
-}> = ({ currentSegment, totalSegments, progress }) => {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        bottom: '60px',
-        left: '80px',
-        right: '80px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-      }}
-    >
-      <div
-        style={{
-          flex: 1,
-          height: '4px',
-          backgroundColor: 'rgba(255,255,255,0.15)',
-          borderRadius: '2px',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            width: `${progress * 100}%`,
-            height: '100%',
-            backgroundColor: '#60a5fa',
-            borderRadius: '2px',
-            transition: 'width 0.1s linear',
-          }}
-        />
-      </div>
-      <span
-        style={{
-          color: 'rgba(255,255,255,0.5)',
-          fontSize: '14px',
-          fontFamily: '"Microsoft YaHei", sans-serif',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {currentSegment + 1} / {totalSegments}
-      </span>
-    </div>
-  );
-};
-
-// ===== 主组件 =====
-export const MainComposition: React.FC<z.infer<typeof myCompSchema>> = ({
+// ── 主组件 ──────────────────────────────────────────────
+export const MainComposition: React.FC<Props> = ({
   titleText,
   subtitleText,
   segments,
   backgroundTheme,
   voiceover,
 }) => {
-  const frame = useCurrentFrame();
-  const { fps, durationInFrames } = useVideoConfig();
-  const totalSegments = segments.length;
+  const { fps } = useVideoConfig();
 
-  // 计算时间轴
-  const titleDuration = fps * 3; // 标题3秒
-  const subtitleDuration = fps * 2; // 副标题2秒
-  let segmentStartFrames: number[] = [];
-  let currentStart = titleDuration + subtitleDuration;
-  for (let i = 0; i < segments.length; i++) {
-    segmentStartFrames.push(currentStart);
-    currentStart += segments[i].duration * fps;
-  }
+  const titleDuration = 3 * fps;        // 3秒
+  const subtitleDuration = 2 * fps;     // 2秒
 
-  // 当前是哪个分段
-  let currentSegment = -1;
-  let segmentProgress = 0;
-  for (let i = 0; i < segments.length; i++) {
-    const segStart = segmentStartFrames[i];
-    const segEnd = segStart + segments[i].duration * fps;
-    if (frame >= segStart && frame < segEnd) {
-      currentSegment = i;
-      segmentProgress = (frame - segStart) / (segEnd - segStart);
-      break;
+  const segmentStartFrames = segments.reduce<number[]>((acc, _, i) => {
+    if (i === 0) {
+      acc.push(titleDuration + subtitleDuration);
+    } else {
+      acc.push(acc[i - 1] + segments[i - 1].duration * fps);
     }
-  }
+    return acc;
+  }, []);
 
-  // 总进度
-  const totalProgress = frame / durationInFrames;
+  // 视频总时长
+  const totalSegmentFrames = segments.reduce((sum, s) => sum + s.duration * fps, 0);
+  const totalDuration = titleDuration + subtitleDuration + totalSegmentFrames;
 
-  // 背景渐变
-  const gradient = themeGradients[backgroundTheme] || themeGradients['gradient-blue-purple'];
+  // 音频文件路径
+  const audioSrc = voiceover ? staticFile('voiceover.mp3') : undefined;
 
   return (
-    <AbsoluteFill>
+    <AbsoluteFill
+      style={{
+        backgroundColor: '#000',
+        fontFamily: '"Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif',
+      }}
+    >
       {/* 背景 */}
-      <div
-        style={{
-          width: '100%',
-          height: '100%',
-          background: gradient,
-          position: 'absolute',
-        }}
-      />
+      <Background theme={backgroundTheme} />
+      <Particles />
 
-      {/* 装饰光效 */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '10%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: '800px',
-          height: '800px',
-          background: 'radial-gradient(circle, rgba(96,165,250,0.08) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }}
-      />
+      {/* 音频 */}
+      {audioSrc && <Audio src={audioSrc} />}
 
-      {/* 标题段 */}
+      {/* 标题 */}
       <Sequence from={0} durationInFrames={titleDuration}>
-        <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ textAlign: 'center', padding: '0 80px' }}>
-            <h1
-              style={{
-                fontSize: '64px',
-                fontWeight: 800,
-                color: '#ffffff',
-                fontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',
-                lineHeight: 1.4,
-                textShadow: '0 4px 20px rgba(0,0,0,0.4)',
-                opacity: spring({
-                  frame: frame,
-                  fps,
-                  config: { damping: 200, stiffness: 100 },
-                }),
-                transform: `translateY(${interpolate(frame, [0, fps], [30, 0])}px)`,
-              }}
-            >
-              {titleText}
-            </h1>
-          </div>
+        <AbsoluteFill
+          style={{
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <TypewriterText
+            text={titleText}
+            startFrame={0}
+            fontSize={80}
+            color="#ffffff"
+            fontWeight={800}
+            charsPerFrame={0.4}
+          />
         </AbsoluteFill>
       </Sequence>
 
-      {/* 副标题段 */}
+      {/* 副标题 */}
       <Sequence from={titleDuration} durationInFrames={subtitleDuration}>
-        <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
-          <div style={{ textAlign: 'center', padding: '0 80px' }}>
-            <p
-              style={{
-                fontSize: '32px',
-                fontWeight: 400,
-                color: '#94a3b8',
-                fontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',
-                lineHeight: 1.6,
-                opacity: spring({
-                  frame: frame - titleDuration,
-                  fps,
-                  config: { damping: 200, stiffness: 100 },
-                }),
-              }}
-            >
-              {subtitleText}
-            </p>
-          </div>
+        <AbsoluteFill
+          style={{
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
+          <TypewriterText
+            text={subtitleText}
+            startFrame={0}
+            fontSize={48}
+            color="rgba(255,255,255,0.85)"
+            fontWeight={500}
+            charsPerFrame={0.3}
+          />
         </AbsoluteFill>
       </Sequence>
 
       {/* 分段字幕 */}
-      {segments.map((segment, index) => (
+      {segments.map((seg, i) => (
         <Sequence
-          key={index}
-          from={segmentStartFrames[index]}
-          durationInFrames={segment.duration * fps}
+          key={i}
+          from={segmentStartFrames[i]}
+          durationInFrames={seg.duration * fps}
         >
-          <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
+          <AbsoluteFill
+            style={{
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            {/* 分段序号 */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 180,
+                fontSize: 24,
+                color: 'rgba(255,255,255,0.4)',
+                letterSpacing: 4,
+              }}
+            >
+              {String(i + 1).padStart(2, '0')} / {String(segments.length).padStart(2, '0')}
+            </div>
+
             <TypewriterText
-              text={segment.text}
+              text={seg.text}
               startFrame={0}
-              duration={segment.duration * fps}
-              fps={fps}
+              fontSize={52}
+              color="#ffffff"
+              fontWeight={700}
+              charsPerFrame={0.35}
             />
           </AbsoluteFill>
         </Sequence>
       ))}
-
-      {/* 进度条 */}
-      <ProgressBar
-        currentSegment={Math.max(0, currentSegment)}
-        totalSegments={totalSegments}
-        progress={totalProgress}
-      />
-
-      {/* 底部品牌标识 */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: '20px',
-          right: '80px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}
-      >
-        <span
-          style={{
-            color: 'rgba(255,255,255,0.3)',
-            fontSize: '14px',
-            fontFamily: '"Microsoft YaHei", sans-serif',
-            letterSpacing: '0.1em',
-          }}
-        >
-          口播 AI 助手
-        </span>
-      </div>
     </AbsoluteFill>
   );
 };
